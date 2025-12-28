@@ -1,0 +1,123 @@
+# https://hub.docker.com/r/hashicorp/vault
+services:
+  vault-0:
+    image: hashicorp/vault:1.21
+    container_name: vault-0
+    hostname: vault-0
+    ports:
+      - "127.0.0.1:8200:8200"
+    # https://github.com/hashicorp/docker-vault/issues/229
+    command:
+      - server
+    volumes:
+      - ./config/config.hcl:/vault/config/config.hcl:ro
+      - vault-file-0:/vault/file
+    networks:
+      - vault-net
+    environment:
+      VAULT_ADDR: "http://vault-0:8200"
+      VAULT_API_ADDR: "http://vault-0:8200"
+      VAULT_CLUSTER_ADDR: "http://vault-0:8201"
+      VAULT_RAFT_NODE_ID: "vault-0"
+    cap_add:
+      - IPC_LOCK
+    restart: unless-stopped
+
+  vault-1:
+    image: hashicorp/vault:1.21
+    container_name: vault-1
+    hostname: vault-1
+    ports:
+      - "127.0.0.1:8201:8200"
+    command:
+      - server
+    volumes:
+      - ./config/config.hcl:/vault/config/config.hcl:ro
+      - vault-file-1:/vault/file
+    networks:
+      - vault-net
+    environment:
+      VAULT_ADDR: "http://vault-1:8200"
+      VAULT_API_ADDR: "http://vault-1:8200"
+      VAULT_CLUSTER_ADDR: "http://vault-1:8201"
+      VAULT_RAFT_NODE_ID: "vault-1"
+    cap_add:
+      - IPC_LOCK
+    restart: unless-stopped
+
+  vault-2:
+    image: hashicorp/vault:1.21
+    container_name: vault-2
+    hostname: vault-2
+    ports:
+      - "127.0.0.1:8202:8200"
+    command:
+      - server
+    volumes:
+      - ./config/config.hcl:/vault/config/config.hcl:ro
+      - vault-file-2:/vault/file
+    networks:
+      - vault-net
+    environment:
+      VAULT_ADDR: "http://vault-2:8200"
+      VAULT_API_ADDR: "http://vault-2:8200"
+      VAULT_CLUSTER_ADDR: "http://vault-2:8201"
+      VAULT_RAFT_NODE_ID: "vault-2"
+    cap_add:
+      - IPC_LOCK
+    restart: unless-stopped
+
+  vault-3:
+    image: hashicorp/vault:1.21
+    container_name: vault-3
+    hostname: vault-3
+    ports:
+      - "127.0.0.1:8203:8200"
+    command:
+      - server
+    volumes:
+      - ./config/config.hcl:/vault/config/config.hcl:ro
+      - vault-file-3:/vault/file
+    networks:
+      - vault-net
+    environment:
+      VAULT_ADDR: "http://vault-3:8200"
+      VAULT_API_ADDR: "http://vault-3:8200"
+      VAULT_CLUSTER_ADDR: "http://vault-3:8201"
+      VAULT_RAFT_NODE_ID: "vault-3"
+    cap_add:
+      - IPC_LOCK
+    restart: unless-stopped
+
+  vault-4:
+    image: hashicorp/vault:1.21
+    container_name: vault-4
+    hostname: vault-4
+    ports:
+      - "127.0.0.1:8204:8200"
+    command:
+      - server
+    volumes:
+      - ./config/config.hcl:/vault/config/config.hcl:ro
+      - vault-file-4:/vault/file
+    networks:
+      - vault-net
+    environment:
+      VAULT_ADDR: "http://vault-4:8200"
+      VAULT_API_ADDR: "http://vault-4:8200"
+      VAULT_CLUSTER_ADDR: "http://vault-4:8201"
+      VAULT_RAFT_NODE_ID: "vault-4"
+    cap_add:
+      - IPC_LOCK
+    restart: unless-stopped
+
+networks:
+  vault-net:
+    driver: bridge
+
+volumes:
+  vault-file-0:
+  vault-file-1:
+  vault-file-2:
+  vault-file-3:
+  vault-file-4:

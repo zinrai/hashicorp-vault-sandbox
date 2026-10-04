@@ -1,0 +1,41 @@
+#!/bin/bash
+#
+# Not for production: there each person creates their key on their own
+# hardware token and hands over only pubkeys/<name>.gpg.
+#
+# One keyring per person for the whole sandbox, not per cluster: the same
+# people hold shares of both Vaults. Public keys go to the cluster directory
+# it runs in.
+
+set -euo pipefail
+
+if [ $# -eq 0 ]; then
+  echo "Usage: keys <name>..." >&2
+  exit 1
+fi
+
+keyring="$(cd "$(dirname "$0")/.." && pwd)/keyring"
+mkdir -p -m 0700 "$keyring"
+mkdir -p pubkeys
+
+for name in "$@"; do
+  home="$keyring/$name"
+  if [ ! -d "$home" ]; then
+    mkdir -m 0700 "$home"
+    # No passphrase: one shell plays every person, unattended.
+    gpg --homedir "$home" --batch --quiet --generate-key <<PARAMS
+%no-protection
+Key-Type: eddsa
+Key-Curve: ed25519
+Key-Usage: sign
+Subkey-Type: ecdh
+Subkey-Curve: cv25519
+Subkey-Usage: encrypt
+Name-Real: $name
+Expire-Date: 0
+%commit
+PARAMS
+  fi
+  gpg --homedir "$home" --batch --export "$name" > "pubkeys/$name.gpg"
+  echo "$name: pubkeys/$name.gpg"
+done

@@ -1,0 +1,10 @@
+#!/bin/bash
+#
+# That person's own decryption, not part of vault-ceremony: in production
+# each holder uses their own OpenPGP tool and key, and here one shell plays
+# every person in turn.
+
+set -euo pipefail
+
+GNUPGHOME="$(cd "$(dirname "$0")/.." && pwd)/keyring/${1:?usage: decrypt <name>}" \
+  exec gpg --batch --quiet --decrypt

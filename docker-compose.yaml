@@ -1,123 +1,198 @@
-# https://hub.docker.com/r/hashicorp/vault
+# The official image as is, not an image of our own: /vault/config,
+# /vault/file and /vault/logs already exist in it, owned by the vault user.
+# On hosts, configuration management replaces this file and nothing else
+# (docs/node-contract.md).
+x-vault: &vault
+  image: hashicorp/vault:2.1.1
+  command: server
+  restart: unless-stopped
+  # group_add, not 0644 or chown: node keys and configuration stay 0640 as
+  # on a host (root:vault), and the vault user reads them through the group.
+  group_add:
+    - "${HOST_GID:-1000}"
+
+# A profile, not always on: the Workload Vault cannot start until its KMS
+# credentials have been provisioned from the Foundation Vault.
+x-workload: &workload
+  <<: *vault
+  profiles: [workload]
+  env_file:
+    - path: workload/vault.env
+      required: false
+
+# The vault image and user, not an image of our own: the socket must belong
+# to the vault user, and this binary needs nothing else.
+x-seal: &seal
+  image: hashicorp/vault:2.1.1
+  profiles: [workload]
+  restart: unless-stopped
+  entrypoint: ["/usr/local/bin/vault-seal-sakura-kms", "-socket", "/vault/seal/kms.sock"]
+  # Not on the workload network: it needs only the way out to the KMS API.
+  env_file:
+    - path: workload/seal.env
+      required: false
+
+# The image as is, with its configuration and the CA certificate mounted,
+# as a host would have them.
+x-load-balancer: &load-balancer
+  image: haproxy:3.2
+  restart: unless-stopped
+
+
 services:
-  vault-0:
-    image: hashicorp/vault:1.21
-    container_name: vault-0
-    hostname: vault-0
-    ports:
-      - "127.0.0.1:8200:8200"
-    # https://github.com/hashicorp/docker-vault/issues/229
-    command:
-      - server
+  foundation-lb:
+    <<: *load-balancer
+    container_name: foundation-lb
     volumes:
-      - ./config/config.hcl:/vault/config/config.hcl:ro
-      - vault-file-0:/vault/file
+      - ./foundation/haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro
+      - ./foundation/ca/root.crt:/usr/local/etc/haproxy/ca.crt:ro
     networks:
-      - vault-net
-    environment:
-      VAULT_ADDR: "http://vault-0:8200"
-      VAULT_API_ADDR: "http://vault-0:8200"
-      VAULT_CLUSTER_ADDR: "http://vault-0:8201"
-      VAULT_RAFT_NODE_ID: "vault-0"
-    cap_add:
-      - IPC_LOCK
-    restart: unless-stopped
+      foundation:
+        ipv4_address: 172.28.0.5
 
-  vault-1:
-    image: hashicorp/vault:1.21
-    container_name: vault-1
-    hostname: vault-1
-    ports:
-      - "127.0.0.1:8201:8200"
-    command:
-      - server
+  foundation-0:
+    <<: *vault
+    container_name: foundation-0
     volumes:
-      - ./config/config.hcl:/vault/config/config.hcl:ro
-      - vault-file-1:/vault/file
+      - ./foundation/config/foundation-0:/vault/config:ro
+      - ./foundation/tls/foundation-0:/vault/tls:ro
+      - foundation-0-data:/vault/file
+      - foundation-0-audit:/vault/logs
     networks:
-      - vault-net
-    environment:
-      VAULT_ADDR: "http://vault-1:8200"
-      VAULT_API_ADDR: "http://vault-1:8200"
-      VAULT_CLUSTER_ADDR: "http://vault-1:8201"
-      VAULT_RAFT_NODE_ID: "vault-1"
-    cap_add:
-      - IPC_LOCK
-    restart: unless-stopped
+      foundation:
+        ipv4_address: 172.28.0.10
 
-  vault-2:
-    image: hashicorp/vault:1.21
-    container_name: vault-2
-    hostname: vault-2
-    ports:
-      - "127.0.0.1:8202:8200"
-    command:
-      - server
+  foundation-1:
+    <<: *vault
+    container_name: foundation-1
     volumes:
-      - ./config/config.hcl:/vault/config/config.hcl:ro
-      - vault-file-2:/vault/file
+      - ./foundation/config/foundation-1:/vault/config:ro
+      - ./foundation/tls/foundation-1:/vault/tls:ro
+      - foundation-1-data:/vault/file
+      - foundation-1-audit:/vault/logs
     networks:
-      - vault-net
-    environment:
-      VAULT_ADDR: "http://vault-2:8200"
-      VAULT_API_ADDR: "http://vault-2:8200"
-      VAULT_CLUSTER_ADDR: "http://vault-2:8201"
-      VAULT_RAFT_NODE_ID: "vault-2"
-    cap_add:
-      - IPC_LOCK
-    restart: unless-stopped
+      foundation:
+        ipv4_address: 172.28.0.11
 
-  vault-3:
-    image: hashicorp/vault:1.21
-    container_name: vault-3
-    hostname: vault-3
-    ports:
-      - "127.0.0.1:8203:8200"
-    command:
-      - server
+  foundation-2:
+    <<: *vault
+    container_name: foundation-2
     volumes:
-      - ./config/config.hcl:/vault/config/config.hcl:ro
-      - vault-file-3:/vault/file
+      - ./foundation/config/foundation-2:/vault/config:ro
+      - ./foundation/tls/foundation-2:/vault/tls:ro
+      - foundation-2-data:/vault/file
+      - foundation-2-audit:/vault/logs
     networks:
-      - vault-net
-    environment:
-      VAULT_ADDR: "http://vault-3:8200"
-      VAULT_API_ADDR: "http://vault-3:8200"
-      VAULT_CLUSTER_ADDR: "http://vault-3:8201"
-      VAULT_RAFT_NODE_ID: "vault-3"
-    cap_add:
-      - IPC_LOCK
-    restart: unless-stopped
+      foundation:
+        ipv4_address: 172.28.0.12
 
-  vault-4:
-    image: hashicorp/vault:1.21
-    container_name: vault-4
-    hostname: vault-4
-    ports:
-      - "127.0.0.1:8204:8200"
-    command:
-      - server
+  workload-lb:
+    <<: *load-balancer
+    container_name: workload-lb
+    profiles: [workload]
     volumes:
-      - ./config/config.hcl:/vault/config/config.hcl:ro
-      - vault-file-4:/vault/file
+      - ./workload/haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro
+      - ./workload/ca/root.crt:/usr/local/etc/haproxy/ca.crt:ro
     networks:
-      - vault-net
-    environment:
-      VAULT_ADDR: "http://vault-4:8200"
-      VAULT_API_ADDR: "http://vault-4:8200"
-      VAULT_CLUSTER_ADDR: "http://vault-4:8201"
-      VAULT_RAFT_NODE_ID: "vault-4"
-    cap_add:
-      - IPC_LOCK
-    restart: unless-stopped
+      workload:
+        ipv4_address: 172.29.0.5
 
+  workload-0:
+    <<: *workload
+    container_name: workload-0
+    volumes:
+      - ./workload/config/workload-0:/vault/config:ro
+      - ./workload/tls/workload-0:/vault/tls:ro
+      - workload-0-data:/vault/file
+      - workload-0-audit:/vault/logs
+      - workload-0-seal:/vault/seal
+    networks:
+      workload:
+        ipv4_address: 172.29.0.10
+
+  workload-0-seal:
+    <<: *seal
+    container_name: workload-0-seal
+    volumes:
+      - ./bin/vault-seal-sakura-kms:/usr/local/bin/vault-seal-sakura-kms:ro
+      - workload-0-seal:/vault/seal
+
+  workload-1:
+    <<: *workload
+    container_name: workload-1
+    volumes:
+      - ./workload/config/workload-1:/vault/config:ro
+      - ./workload/tls/workload-1:/vault/tls:ro
+      - workload-1-data:/vault/file
+      - workload-1-audit:/vault/logs
+      - workload-1-seal:/vault/seal
+    networks:
+      workload:
+        ipv4_address: 172.29.0.11
+
+  workload-1-seal:
+    <<: *seal
+    container_name: workload-1-seal
+    volumes:
+      - ./bin/vault-seal-sakura-kms:/usr/local/bin/vault-seal-sakura-kms:ro
+      - workload-1-seal:/vault/seal
+
+  workload-2:
+    <<: *workload
+    container_name: workload-2
+    volumes:
+      - ./workload/config/workload-2:/vault/config:ro
+      - ./workload/tls/workload-2:/vault/tls:ro
+      - workload-2-data:/vault/file
+      - workload-2-audit:/vault/logs
+      - workload-2-seal:/vault/seal
+    networks:
+      workload:
+        ipv4_address: 172.29.0.12
+
+  workload-2-seal:
+    <<: *seal
+    container_name: workload-2-seal
+    volumes:
+      - ./bin/vault-seal-sakura-kms:/usr/local/bin/vault-seal-sakura-kms:ro
+      - workload-2-seal:/vault/seal
+
+
+# No published ports: the host reaches the nodes on the bridge networks at
+# the addresses they use for each other, so the certificates match. Two
+# networks, not one: the Workload Vault must not reach the Foundation Vault
+# at runtime.
 networks:
-  vault-net:
-    driver: bridge
+  foundation:
+    ipam:
+      config:
+        - subnet: 172.28.0.0/24
+  workload:
+    ipam:
+      config:
+        - subnet: 172.29.0.0/24
+
+# tmpfs owned by the vault user, not a plain volume: a plain volume is
+# created root-owned, and the socket has no business on disk.
+x-seal-socket: &seal-socket
+  driver_opts:
+    type: tmpfs
+    device: tmpfs
+    o: "uid=100,gid=1000,mode=0750"
 
 volumes:
-  vault-file-0:
-  vault-file-1:
-  vault-file-2:
-  vault-file-3:
-  vault-file-4:
+  foundation-0-data:
+  foundation-1-data:
+  foundation-2-data:
+  foundation-0-audit:
+  foundation-1-audit:
+  foundation-2-audit:
+  workload-0-data:
+  workload-1-data:
+  workload-2-data:
+  workload-0-audit:
+  workload-1-audit:
+  workload-2-audit:
+  workload-0-seal: *seal-socket
+  workload-1-seal: *seal-socket
+  workload-2-seal: *seal-socket

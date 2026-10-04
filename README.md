@@ -1,120 +1,87 @@
 # HashiCorp Vault Sandbox
 
-A 5-node Vault OSS Raft HA cluster using Docker Compose for learning Vault operations.
+Practise running a two-tier secrets hierarchy on one Linux host, with two 3-node Vault clusters on Docker Compose, each behind an HAProxy load balancer:
 
-## Overview
+| Cluster | Unsealed by | Holds |
+|---|---|---|
+| **Foundation Vault** (`foundation/`) | Unseal keys held by people | What it takes to rebuild everything else, including the Workload Vault's KMS credentials |
+| **Workload Vault** (`workload/`) | [SAKURA Cloud KMS](https://cloud.sakura.ad.jp/products/kms/), through [vault-seal-sakura-kms](https://github.com/zinrai/vault-seal-sakura-kms) | The secrets applications use. People hold its recovery keys |
 
-This project provides a "flight simulator" for Vault operations—bridging the gap between `vault server -dev` and production deployments.
-
-What you can learn:
-
-- Raft integrated storage and HA clustering
-- Manual unseal process with Shamir's secret sharing
-- Cluster state monitoring with Autopilot
-- Failure recovery and leader failover
+The ceremonies are run with [vault-ceremony](https://github.com/zinrai/vault-ceremony); everything else with the `vault` CLI. One shell plays every person: `decrypt <name>` is that person's own decryption, piped between two vault-ceremony commands, and `vault-ceremony status --as <name>` shows what they do next.
 
 ## Prerequisites
 
-- Docker
-- Docker Compose V2
+- Linux, with Docker and Docker Compose V2, `gpg`, and OpenSSL 3
+- A SAKURA Cloud KMS key, and an API key that can use it
 
-## Quick Start
+## Start
 
-Start the cluster:
-
-```bash
-$ sudo docker compose up -d
-```
-
-Initialize Vault and save the unseal keys:
+Put the [vault-ceremony](https://github.com/zinrai/vault-ceremony/releases) and [vault-seal-sakura-kms](https://github.com/zinrai/vault-seal-sakura-kms/releases) release binaries in `bin/` as `vault-ceremony` and `vault-seal-sakura-kms`. Then take the `vault` CLI out of the image, and set up the shell:
 
 ```bash
-$ sudo docker compose exec vault-0 vault operator init > init-output.txt
+$ docker run --rm --entrypoint cat hashicorp/vault:2.1.1 /bin/vault > bin/vault && chmod +x bin/vault
+$ . sandbox/env.sh
 ```
 
-Unseal all nodes:
+### Foundation Vault
 
 ```bash
-$ sudo ./unseal.sh --target all
+$ cd foundation && . ./env
+$ keys alice bob carol safe-hq safe-dc2
+$ certs
+$ docker compose up -d
+$ vault-ceremony init
+$ for h in alice bob carol; do vault-ceremony key --as $h | decrypt $h | vault-ceremony unseal --node foundation-0 --as $h; done
+$ for h in alice bob carol; do vault-ceremony key --as $h | decrypt $h | vault-ceremony unseal --as $h; done     # again if a node has not joined yet
+$ vault-ceremony initial-root-token --as alice | decrypt alice | vault-ceremony bootstrap --as alice
 ```
 
-Login with the root token:
+Log in as alice with their initial password, and store the Workload Vault's KMS credentials:
 
 ```bash
-sudo docker compose exec vault-0 vault login $(grep "Initial Root Token" init-output.txt | awk '{ print $NF }')
+$ decrypt alice < state/passwords/alice.asc
+$ vault login -method=userpass username=alice
+$ vault secrets enable -path=secret kv-v2
+$ vault kv put secret/platform/sakura-kms \
+    access_token=<access token> access_token_secret=<secret> key_id=<KMS key resource ID>
 ```
 
-## Operational Scenarios
+### Workload Vault
 
-### Checking Cluster State
-
-View Raft peer list:
+Provision its seal from the Foundation Vault, still logged in there: the KMS credentials for the seals, and the key ID for the nodes:
 
 ```bash
-$ sudo docker compose exec vault-0 vault operator raft list-peers
+$ kms() { vault kv get -field="$1" secret/platform/sakura-kms; }
+$ (umask 077
+   printf 'SAKURA_ACCESS_TOKEN=%s\nSAKURA_ACCESS_TOKEN_SECRET=%s\nSAKURA_KMS_KEY_ID=%s\n' \
+     "$(kms access_token)" "$(kms access_token_secret)" "$(kms key_id)" > ../workload/seal.env
+   printf 'VAULT_TRANSIT_SEAL_KEY_NAME=%s\n' "$(kms key_id)" > ../workload/vault.env)
 ```
 
-View detailed Autopilot state including health status and last contact time:
+Then start it, and initialize it. The KMS unseals every node:
 
 ```bash
-$ sudo docker compose exec vault-0 vault operator raft autopilot state
+$ cd ../workload && . ./env
+$ keys alice bob carol safe-hq safe-dc2
+$ certs
+$ docker compose --profile workload up -d
+$ vault-ceremony init
+$ vault-ceremony initial-root-token --as alice | decrypt alice | vault-ceremony bootstrap --as alice
 ```
 
-### Follower Recovery
+Log in as for the Foundation Vault. `cd <cluster> && . ./env` switches between the two; log in again after switching.
 
-Stop a follower node:
+### Applications
 
-```bash
-$ sudo docker compose down vault-1
-```
+To put applications on the Workload Vault, follow [hashicorp-vault-lab](https://github.com/zinrai/hashicorp-vault-lab)'s README.
 
-Observe the cluster state—vault-1 becomes unhealthy:
+## Practise
 
-```bash
-$ sudo docker compose exec vault-0 vault operator raft autopilot state
-```
+Failover, ceremonies, restore and the rest are in [docs/scenarios.md](docs/scenarios.md).
 
-Restore the node:
+## Taking It to Production
 
-```bash
-$ sudo docker compose up -d vault-1
-$ sudo ./unseal.sh --target vault-1
-```
-
-### Leader Failover
-
-Stop the leader node (assuming vault-0 is leader):
-
-```bash
-$ sudo docker compose down vault-0
-```
-
-A new leader is elected automatically. Verify from another node:
-
-```bash
-$ sudo docker compose exec vault-1 vault operator raft list-peers
-```
-
-Restore the former leader:
-
-```bash
-$ sudo docker compose up -d vault-0
-$ sudo ./unseal.sh --target vault-0
-```
-
-The node rejoins as a follower, not reclaiming leadership.
-
-## Notes
-
-This environment is for learning purposes only.
-
-Differences from production:
-
-- TLS is disabled
-- Unseal keys are stored in plaintext files
-- Single host (no physical HA)
-
-In production, use Auto Unseal with a KMS and enable TLS.
+Only the nodes change: on hosts, configuration management provides what `docker-compose.yaml` provides here. [docs/node-contract.md](docs/node-contract.md) lists it.
 
 ## License
 

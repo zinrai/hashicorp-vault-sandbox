@@ -1,1 +1,19 @@
-*.txt
+/bin/
+
+# Not committed, though in production root.crt may be: each sandbox makes
+# its own CA. root.key never leaves the offline machine.
+/*/ca/
+
+# Not committed: node private keys.
+/*/tls/
+
+# Not committed: encrypted, but not public either.
+/*/state/
+
+# Not committed, though in production pubkeys/ is: each sandbox makes its
+# own keys.
+/*/pubkeys/
+/sandbox/keyring/
+
+# Not committed: the KMS credentials, provisioned from the Foundation Vault.
+/workload/*.env

@@ -138,7 +138,7 @@ $ vault login -method=userpass username=alice
 
 For the Workload Vault, the same with `--profile workload` and `workload-[0-2]`, without the unseals: the seal unseals every node.
 
-## Rotating the KMS Credentials (Workload)
+## Rotating the KMS Credentials (Workload, SAKURA Cloud KMS)
 
 Update the credentials in the Foundation Vault, write `workload/seal.env` again as in the [README](../README.md#workload-vault), and restart the seals:
 

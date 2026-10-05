@@ -15,5 +15,8 @@
 /*/pubkeys/
 /sandbox/keyring/
 
-# Not committed: the KMS credentials, provisioned from the Foundation Vault.
+# Not committed: the seal's credentials, the development seal's key, and
+# the choice of seal, which differs from one sandbox to the next.
 /workload/*.env
+/workload/seal-key/
+/.env

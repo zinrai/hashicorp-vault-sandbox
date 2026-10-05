@@ -45,11 +45,12 @@ listener "tcp" {
   proxy_protocol_authorized_addrs = "172.29.0.5"
 }
 
-# Transit, not Shamir: the Sakura Cloud KMS unseals every node, through
-# vault-seal-sakura-kms beside it. A Unix socket, not loopback TCP, so that
-# only the vault group can ask the KMS to decrypt. No key_name here: it
-# comes from VAULT_TRANSIT_SEAL_KEY_NAME, provisioned with the KMS
-# credentials from the Foundation Vault, so the KMS key is named in one place.
+# Transit, not Shamir and not a KMS's own seal type: whichever seal runs
+# beside the node (vault-seal-dev, or vault-seal-sakura-kms for SAKURA Cloud
+# KMS) answers Vault's transit API, so this stanza is the same for each. A
+# Unix socket, not loopback TCP, so that only the vault group can ask for a
+# decryption. No key_name here: it comes from VAULT_TRANSIT_SEAL_KEY_NAME,
+# dev for the development seal, the KMS key ID for a KMS.
 seal "transit" {
   address         = "unix:///vault/seal/kms.sock"
   mount_path      = "transit/"

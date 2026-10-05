@@ -29,9 +29,9 @@ Workload nodes also provide:
 
 | | Sandbox | Hosts |
 |---|---|---|
-| Seal | `vault-seal-sakura-kms` in a container beside the node, as the `vault` user | systemd unit running `vault-seal-sakura-kms` as a member of the `vault` group |
+| Seal | `vault-seal-dev`, or `vault-seal-sakura-kms` (`WORKLOAD_SEAL`), in a container beside the node | systemd unit running a seal backed by a KMS, such as `vault-seal-sakura-kms`, as a member of the `vault` group; never `vault-seal-dev`, whose key is a file on the host |
 | `/vault/seal/kms.sock` | tmpfs volume shared with the node | Directory owned by `vault`, 0750 |
-| KMS credentials | `workload/seal.env`, from the Foundation Vault | Environment file of the seal unit, 0600, from the Foundation Vault |
-| `VAULT_TRANSIT_SEAL_KEY_NAME` | `workload/vault.env` | Environment of the vault unit |
-| Reachability of the seal | The KMS API | The KMS API |
+| The seal's key or credentials | `workload/seal-key/` from `dev-seal`, or `workload/seal.env` with the KMS credentials from the Foundation Vault | The KMS credentials, from the Foundation Vault, given to the seal unit only |
+| `VAULT_TRANSIT_SEAL_KEY_NAME` | `dev`, or the KMS key ID from `.env` | The KMS key ID, in the environment of the vault unit |
+| Reachability of the seal | The KMS API, if any | The KMS API |
 | Reachability of what secrets engines and auth methods name | Containers on the `workload` network, by name | The databases, OIDC providers and other services they name |

@@ -4,19 +4,19 @@ Practise running a two-tier secrets hierarchy on one Linux host, with two 3-node
 
 | Cluster | Unsealed by | Holds |
 |---|---|---|
-| **Foundation Vault** (`foundation/`) | Unseal keys held by people | What it takes to rebuild everything else, including the Workload Vault's KMS credentials |
-| **Workload Vault** (`workload/`) | [SAKURA Cloud KMS](https://cloud.sakura.ad.jp/products/kms/), through [vault-seal-sakura-kms](https://github.com/zinrai/vault-seal-sakura-kms) | The secrets applications use. People hold its recovery keys |
+| **Foundation Vault** (`foundation/`) | Unseal keys held by people | What it takes to rebuild everything else, including the Workload Vault's KMS credentials when it uses a cloud KMS |
+| **Workload Vault** (`workload/`) | A seal beside each node that answers Vault's transit API: [vault-seal-dev](https://github.com/zinrai/vault-seal-dev) (a key file, development only), or [SAKURA Cloud KMS](https://cloud.sakura.ad.jp/products/kms/) through [vault-seal-sakura-kms](https://github.com/zinrai/vault-seal-sakura-kms) | The secrets applications use. People hold its recovery keys |
 
 The ceremonies are run with [vault-ceremony](https://github.com/zinrai/vault-ceremony); everything else with the `vault` CLI. One shell plays every person: `decrypt <name>` is that person's own decryption, piped between two vault-ceremony commands, and `vault-ceremony status --as <name>` shows what they do next.
 
 ## Prerequisites
 
 - Linux, with Docker and Docker Compose V2, `gpg`, and OpenSSL 3
-- A SAKURA Cloud KMS key, and an API key that can use it
+- For SAKURA Cloud KMS instead of the development seal: a KMS key, and an API key that can use it
 
 ## Start
 
-Put the [vault-ceremony](https://github.com/zinrai/vault-ceremony/releases) and [vault-seal-sakura-kms](https://github.com/zinrai/vault-seal-sakura-kms/releases) release binaries in `bin/` as `vault-ceremony` and `vault-seal-sakura-kms`. Then take the `vault` CLI out of the image, and set up the shell:
+Put the [vault-ceremony](https://github.com/zinrai/vault-ceremony/releases) and [vault-seal-dev](https://github.com/zinrai/vault-seal-dev/releases) release binaries in `bin/` as `vault-ceremony` and `vault-seal-dev`, and [vault-seal-sakura-kms](https://github.com/zinrai/vault-seal-sakura-kms/releases) as `vault-seal-sakura-kms` to use SAKURA Cloud KMS. Then take the `vault` CLI out of the image, and set up the shell:
 
 ```bash
 $ docker run --rm --entrypoint cat hashicorp/vault:2.1.1 /bin/vault > bin/vault && chmod +x bin/vault
@@ -36,32 +36,39 @@ $ for h in alice bob carol; do vault-ceremony key --as $h | decrypt $h | vault-c
 $ vault-ceremony initial-root-token --as alice | decrypt alice | vault-ceremony bootstrap --as alice
 ```
 
-Log in as alice with their initial password, and store the Workload Vault's KMS credentials:
+Log in as alice with their initial password:
 
 ```bash
 $ decrypt alice < state/passwords/alice.asc
 $ vault login -method=userpass username=alice
 $ vault secrets enable -path=secret kv-v2
-$ vault kv put secret/platform/sakura-kms \
-    access_token=<access token> access_token_secret=<secret> key_id=<KMS key resource ID>
 ```
 
 ### Workload Vault
 
-Provision its seal from the Foundation Vault, still logged in there: the KMS credentials for the seals, and the key ID for the nodes:
+Provision its seal. The development seal's key is made here, as a file:
 
 ```bash
+$ cd ../workload && . ./env
+$ dev-seal
+```
+
+Or, with SAKURA Cloud KMS, store its credentials in the Foundation Vault, while still logged in there, and provision them from it: the credentials for the seals, and in `.env`, which Docker Compose reads, the seal to run and the key ID for the nodes.
+
+```bash
+$ vault kv put secret/platform/sakura-kms \
+    access_token=<access token> access_token_secret=<secret> key_id=<KMS key resource ID>
 $ kms() { vault kv get -field="$1" secret/platform/sakura-kms; }
 $ (umask 077
    printf 'SAKURA_ACCESS_TOKEN=%s\nSAKURA_ACCESS_TOKEN_SECRET=%s\nSAKURA_KMS_KEY_ID=%s\n' \
      "$(kms access_token)" "$(kms access_token_secret)" "$(kms key_id)" > ../workload/seal.env
-   printf 'VAULT_TRANSIT_SEAL_KEY_NAME=%s\n' "$(kms key_id)" > ../workload/vault.env)
+   printf 'WORKLOAD_SEAL=vault-seal-sakura-kms\nWORKLOAD_SEAL_KEY_NAME=%s\n' "$(kms key_id)" > ../.env)
+$ cd ../workload && . ./env
 ```
 
-Then start it, and initialize it. The KMS unseals every node:
+Then start it, and initialize it. The seal unseals every node:
 
 ```bash
-$ cd ../workload && . ./env
 $ keys alice bob carol safe-hq safe-dc2
 $ certs
 $ docker compose --profile workload up -d

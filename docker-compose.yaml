@@ -11,23 +11,34 @@ x-vault: &vault
   group_add:
     - "${HOST_GID:-1000}"
 
-# A profile, not always on: the Workload Vault cannot start until its KMS
-# credentials have been provisioned from the Foundation Vault.
+# A profile, not always on: the Workload Vault cannot start until its seal
+# has been provisioned.
 x-workload: &workload
   <<: *vault
   profiles: [workload]
-  env_file:
-    - path: workload/vault.env
-      required: false
+  # dev unless .env names a KMS key: the development seal serves no other.
+  environment:
+    VAULT_TRANSIT_SEAL_KEY_NAME: ${WORKLOAD_SEAL_KEY_NAME:-dev}
 
 # The vault image and user, not an image of our own: the socket must belong
-# to the vault user, and this binary needs nothing else.
+# to the vault user, and the seal needs nothing else. Which seal, from
+# WORKLOAD_SEAL, not fixed: any server of Vault's transit API will do, and
+# the nodes' configuration is the same for each.
 x-seal: &seal
   image: hashicorp/vault:2.1.1
   profiles: [workload]
   restart: unless-stopped
-  entrypoint: ["/usr/local/bin/vault-seal-sakura-kms", "-socket", "/vault/seal/kms.sock"]
-  # Not on the workload network: it needs only the way out to the KMS API.
+  entrypoint: ["/usr/local/bin/vault-seal", "-socket", "/vault/seal/kms.sock"]
+  # group_add, as for the nodes: the development seal's key stays 0640, and
+  # the vault user reads it through the group.
+  group_add:
+    - "${HOST_GID:-1000}"
+  # Not on the workload network: it needs at most the way out to a KMS API.
+  # The development key's path, fixed here, not provisioned: it is no
+  # secret, and only vault-seal-dev reads it. A KMS's credentials, secret,
+  # from seal.env.
+  environment:
+    VAULT_SEAL_DEV_KEY: /vault/seal-key/key.gpg
   env_file:
     - path: workload/seal.env
       required: false
@@ -114,7 +125,8 @@ services:
     <<: *seal
     container_name: workload-0-seal
     volumes:
-      - ./bin/vault-seal-sakura-kms:/usr/local/bin/vault-seal-sakura-kms:ro
+      - ./bin/${WORKLOAD_SEAL:-vault-seal-dev}:/usr/local/bin/vault-seal:ro
+      - ./workload/seal-key:/vault/seal-key:ro
       - workload-0-seal:/vault/seal
 
   workload-1:
@@ -134,7 +146,8 @@ services:
     <<: *seal
     container_name: workload-1-seal
     volumes:
-      - ./bin/vault-seal-sakura-kms:/usr/local/bin/vault-seal-sakura-kms:ro
+      - ./bin/${WORKLOAD_SEAL:-vault-seal-dev}:/usr/local/bin/vault-seal:ro
+      - ./workload/seal-key:/vault/seal-key:ro
       - workload-1-seal:/vault/seal
 
   workload-2:
@@ -154,7 +167,8 @@ services:
     <<: *seal
     container_name: workload-2-seal
     volumes:
-      - ./bin/vault-seal-sakura-kms:/usr/local/bin/vault-seal-sakura-kms:ro
+      - ./bin/${WORKLOAD_SEAL:-vault-seal-dev}:/usr/local/bin/vault-seal:ro
+      - ./workload/seal-key:/vault/seal-key:ro
       - workload-2-seal:/vault/seal
 
 

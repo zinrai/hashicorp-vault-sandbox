@@ -1,0 +1,32 @@
+#!/bin/bash
+#
+# The development seal's key, made once in the cluster directory. Not for
+# production: anyone who can read seal-key/ can unseal the cluster.
+#
+# Made once, not on every run: a new key could not decrypt the root key
+# that the old one sealed.
+
+set -euo pipefail
+
+[ -f seal-key/key.gpg ] && exit 0
+
+home=$(mktemp -d)
+trap 'rm -rf "$home"' EXIT
+gpg --homedir "$home" --batch --quiet --generate-key <<PARAMS
+%no-protection
+Key-Type: eddsa
+Key-Curve: ed25519
+Key-Usage: sign
+Subkey-Type: ecdh
+Subkey-Curve: cv25519
+Subkey-Usage: encrypt
+Name-Real: $(basename "$PWD") development seal
+Expire-Date: 0
+%commit
+PARAMS
+mkdir -p -m 0750 seal-key
+gpg --homedir "$home" --batch --export-secret-keys > seal-key/key.gpg
+# 0640, not 0600: the seal reads the key through the group, as the nodes
+# read theirs.
+chmod 0640 seal-key/key.gpg
+echo "seal-key/key.gpg"

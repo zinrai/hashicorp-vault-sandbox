@@ -104,7 +104,14 @@ Log in as for the Foundation Vault. `cd <cluster> && . ./env` switches between t
 
 ### Applications
 
-To put applications on the Workload Vault, follow [hashicorp-vault-lab](https://github.com/zinrai/hashicorp-vault-lab)'s README.
+To put applications on the Workload Vault, clone [hashicorp-vault-lab](https://github.com/zinrai/hashicorp-vault-lab) here, set up the shell for it, and follow its README from there:
+
+```bash
+$ cd ../workload && . ./env
+$ vault login -method=userpass username=alice
+$ export VAULT_NETWORK=hashicorp-vault-sandbox_workload
+$ cd ../hashicorp-vault-lab
+```
 
 ## Practise
 

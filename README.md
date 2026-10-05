@@ -7,6 +7,30 @@ Practise running a two-tier secrets hierarchy on one Linux host, with two 3-node
 | **Foundation Vault** (`foundation/`) | Unseal keys held by people | What it takes to rebuild everything else, including the Workload Vault's KMS credentials when it uses a cloud KMS |
 | **Workload Vault** (`workload/`) | A seal beside each node that answers Vault's transit API: [vault-seal-dev](https://github.com/zinrai/vault-seal-dev) (a key file, development only), or [SAKURA Cloud KMS](https://cloud.sakura.ad.jp/products/kms/) through [vault-seal-sakura-kms](https://github.com/zinrai/vault-seal-sakura-kms) | The secrets applications use. People hold its recovery keys |
 
+```mermaid
+flowchart TB
+    people["Holders and operators"]
+
+    subgraph foundation["Foundation Vault"]
+        flb["HAProxy"] --> fnodes["3 nodes, Raft"]
+    end
+
+    subgraph workload["Workload Vault"]
+        wlb["HAProxy"] --> wnodes["3 nodes, Raft"]
+        wnodes -->|"transit API"| seal["seal beside each node"]
+    end
+
+    people -->|"vault CLI"| flb
+    people -->|"unseal keys"| fnodes
+    people -->|"vault CLI"| wlb
+    people -->|"recovery keys"| wnodes
+    fnodes -.->|"KMS credentials"| seal
+    seal --> dev["vault-seal-dev: key file"]
+    seal -.-> kms["SAKURA Cloud KMS"]
+```
+
+Keys reach the nodes through vault-ceremony; dashed lines apply only with SAKURA Cloud KMS, whose credentials an operator provisions from the Foundation Vault. The two clusters are on separate networks: the Workload Vault never reaches the Foundation Vault at runtime. How each part connects is in [docs/architecture.md](docs/architecture.md).
+
 The ceremonies are run with [vault-ceremony](https://github.com/zinrai/vault-ceremony); everything else with the `vault` CLI. One shell plays every person: `decrypt <name>` is that person's own decryption, piped between two vault-ceremony commands, and `vault-ceremony status --as <name>` shows what they do next.
 
 ## Prerequisites

@@ -1,10 +1,9 @@
 # Sourced, not run: it sets up the calling shell, in the sandbox's root.
-#
-# The sandbox's own commands on PATH beside the release binaries, not
-# called by path: they stand in for what people and machines do, in any
-# cluster directory.
 
-export PATH="$PWD/bin:$PWD/sandbox/bin:$PATH"
+export PATH="$PWD/bin:$PATH"
+# One keyring for both clusters, not one each: the same people hold keys
+# to both.
+export PGP_PERSONAS_KEYRING="$PWD/sandbox/keyring"
 # Pinned, not looked up: docker compose then works from either cluster's
 # directory, as one project.
 export COMPOSE_FILE="$PWD/docker-compose.yaml"

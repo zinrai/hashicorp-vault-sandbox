@@ -19,7 +19,7 @@ Stop a node only while autopilot shows `Failure Tolerance: 1`.
 $ docker compose stop foundation-vault-1
 $ vault operator raft autopilot state
 $ docker compose start foundation-vault-1
-$ for h in alice bob safe-hq; do vault-ceremony key --as $h | decrypt $h | vault-ceremony unseal --node foundation-vault-1 --as $h; done
+$ for h in alice bob safe-hq; do vault-ceremony key --as $h | pgp-personas decrypt --as $h | vault-ceremony unseal --node foundation-vault-1 --as $h; done
 ```
 
 ## Node Restart (Workload)
@@ -54,7 +54,7 @@ $ vault-ceremony status
 $ vault status                             # through the load balancer, from the new active node
 $ docker compose logs foundation-vault-lb  # which node it sends to
 $ docker compose start foundation-vault-0
-$ for h in alice bob carol; do vault-ceremony key --as $h | decrypt $h | vault-ceremony unseal --node foundation-vault-0 --as $h; done
+$ for h in alice bob carol; do vault-ceremony key --as $h | pgp-personas decrypt --as $h | vault-ceremony unseal --node foundation-vault-0 --as $h; done
 ```
 
 ## Rolling Restart (Foundation)
@@ -63,7 +63,7 @@ One node at a time, `foundation-vault-0` last, each once autopilot shows `Failur
 
 ```bash
 $ docker compose restart foundation-vault-2
-$ for h in alice bob carol; do vault-ceremony key --as $h | decrypt $h | vault-ceremony unseal --node foundation-vault-2 --as $h; done
+$ for h in alice bob carol; do vault-ceremony key --as $h | pgp-personas decrypt --as $h | vault-ceremony unseal --node foundation-vault-2 --as $h; done
 ```
 
 If the node is not listening yet, the unseal reports it as unreachable; run it again.
@@ -74,8 +74,8 @@ The coordinator starts it for alice, three holders approve with the printed nonc
 
 ```bash
 $ vault-ceremony generate-root --for alice
-$ for h in alice carol safe-dc2; do vault-ceremony key --as $h | decrypt $h | vault-ceremony approve --nonce <nonce> --as $h; done
-$ vault-ceremony root-token --as alice | decrypt alice
+$ for h in alice carol safe-dc2; do vault-ceremony key --as $h | pgp-personas decrypt --as $h | vault-ceremony approve --nonce <nonce> --as $h; done
+$ vault-ceremony root-token --as alice | pgp-personas decrypt --as alice
 $ VAULT_TOKEN=<root token> vault token revoke -self
 $ rm state/root-token.json
 ```
@@ -90,10 +90,10 @@ Let generate-root run without a token, generate a root token as above, then clos
 $ for n in 0 1 2; do echo 'enable_unauthenticated_access = ["generate-root"]' >> config/foundation-vault-$n/vault.hcl; done
 $ docker compose kill -s HUP foundation-vault-0 foundation-vault-1 foundation-vault-2
 $ vault-ceremony generate-root --for alice
-$ for h in alice carol safe-dc2; do vault-ceremony key --as $h | decrypt $h | vault-ceremony approve --nonce <nonce> --as $h; done
+$ for h in alice carol safe-dc2; do vault-ceremony key --as $h | pgp-personas decrypt --as $h | vault-ceremony approve --nonce <nonce> --as $h; done
 $ sed -i '/^enable_unauthenticated_access/d' config/foundation-vault-*/vault.hcl
 $ docker compose kill -s HUP foundation-vault-0 foundation-vault-1 foundation-vault-2
-$ vault-ceremony root-token --as alice | decrypt alice
+$ vault-ceremony root-token --as alice | pgp-personas decrypt --as alice
 ```
 
 For the Workload Vault, the same with `workload-vault-[0-2]`. While it is open, anyone who can reach the API can cancel the generation, so close it as soon as the token is out.
@@ -103,10 +103,10 @@ For the Workload Vault, the same with `workload-vault-[0-2]`. While it is open, 
 Replace the departing holder in `holders` of `ceremony.yaml` (say carol with dave), then:
 
 ```bash
-$ keys dave
+$ pgp-personas person --name dave --pubkey pubkeys/dave.gpg
 $ vault-ceremony rekey
-$ for h in alice bob carol; do vault-ceremony key --as $h | decrypt $h | vault-ceremony approve --nonce <nonce> --as $h; done
-$ for h in alice dave safe-hq; do vault-ceremony key --nonce <verification nonce> --as $h | decrypt $h | vault-ceremony approve --nonce <verification nonce> --as $h; done
+$ for h in alice bob carol; do vault-ceremony key --as $h | pgp-personas decrypt --as $h | vault-ceremony approve --nonce <nonce> --as $h; done
+$ for h in alice dave safe-hq; do vault-ceremony key --nonce <verification nonce> --as $h | pgp-personas decrypt --as $h | vault-ceremony approve --nonce <verification nonce> --as $h; done
 ```
 
 The last approval of the current holders prints the verification nonce. The new keys take effect when the new holders have approved with them. The old key set moves to `state/archive/`.
@@ -130,9 +130,9 @@ $ docker volume rm $(docker volume ls -q | grep -E '_foundation-[0-2]-(data|audi
 $ docker compose up -d foundation-vault-0
 $ vault-ceremony restore --snapshot state/snapshots/<time>.snap --shares state/snapshots/<time>.shares.json
 $ docker compose restart foundation-vault-0
-$ for h in alice bob carol; do vault-ceremony key --as $h | decrypt $h | vault-ceremony unseal --node foundation-vault-0 --as $h; done
+$ for h in alice bob carol; do vault-ceremony key --as $h | pgp-personas decrypt --as $h | vault-ceremony unseal --node foundation-vault-0 --as $h; done
 $ docker compose up -d foundation-vault-1 foundation-vault-2
-$ for h in alice bob carol; do vault-ceremony key --as $h | decrypt $h | vault-ceremony unseal --as $h; done
+$ for h in alice bob carol; do vault-ceremony key --as $h | pgp-personas decrypt --as $h | vault-ceremony unseal --as $h; done
 $ vault login -method=userpass username=alice
 ```
 

@@ -31,16 +31,16 @@ flowchart TB
 
 Keys reach the nodes through vault-ceremony; dashed lines apply only with SAKURA Cloud KMS, whose credentials an operator provisions from the Foundation Vault. The two clusters are on separate networks: the Workload Vault never reaches the Foundation Vault at runtime. How each part connects is in [docs/architecture.md](docs/architecture.md).
 
-The ceremonies are run with [vault-ceremony](https://github.com/zinrai/vault-ceremony); everything else with the `vault` CLI. One shell plays every person: `decrypt <name>` is that person's own decryption, piped between two vault-ceremony commands, and `vault-ceremony status --as <name>` shows what they do next.
+The ceremonies are run with [vault-ceremony](https://github.com/zinrai/vault-ceremony); everything else with the `vault` CLI. One shell plays every person: `pgp-personas decrypt --as <name>` is that person's own decryption, piped between two vault-ceremony commands, and `vault-ceremony status --as <name>` shows what they do next.
 
 ## Prerequisites
 
-- Linux, with Docker and Docker Compose V2, `gpg`, and OpenSSL 3
+- Linux, with Docker and Docker Compose V2, and [mkcert](https://github.com/FiloSottile/mkcert) (`apt install mkcert`)
 - For SAKURA Cloud KMS instead of the development seal: a KMS key, and an API key that can use it
 
 ## Start
 
-Put the [vault-ceremony](https://github.com/zinrai/vault-ceremony/releases) and [vault-seal-dev](https://github.com/zinrai/vault-seal-dev/releases) release binaries in `bin/` as `vault-ceremony` and `vault-seal-dev`, and [vault-seal-sakura-kms](https://github.com/zinrai/vault-seal-sakura-kms/releases) as `vault-seal-sakura-kms` to use SAKURA Cloud KMS. Then take the `vault` CLI out of the image, and set up the shell:
+Put the [vault-ceremony](https://github.com/zinrai/vault-ceremony/releases), [pgp-personas](https://github.com/zinrai/pgp-personas/releases) and [vault-seal-dev](https://github.com/zinrai/vault-seal-dev/releases) release binaries in `bin/` as `vault-ceremony`, `pgp-personas` and `vault-seal-dev`, and [vault-seal-sakura-kms](https://github.com/zinrai/vault-seal-sakura-kms/releases) as `vault-seal-sakura-kms` to use SAKURA Cloud KMS. Then take the `vault` CLI out of the image, and set up the shell:
 
 ```bash
 $ docker run --rm --entrypoint cat hashicorp/vault:2.1.1 /bin/vault > bin/vault && chmod +x bin/vault
@@ -49,21 +49,24 @@ $ . sandbox/env.sh
 
 ### Foundation Vault
 
+The people's keys, then from the cluster's CA in `ca/`, which mkcert makes the first time, each node's certificate for its own address and the load balancer's. vault-ceremony reads the CA as `ca/root.crt`.
+
 ```bash
 $ cd foundation-vault && . ./env
-$ keys alice bob carol safe-hq safe-dc2
-$ certs
+$ for p in alice bob carol safe-hq safe-dc2; do pgp-personas person --name $p --pubkey pubkeys/$p.gpg; done
+$ for n in 0 1 2; do d=tls/foundation-vault-$n; mkdir -p $d && mkcert -ecdsa -cert-file $d/server.crt -key-file $d/server.key 172.28.0.1$n 172.28.0.5 && chmod 0640 $d/server.key && cp ca/rootCA.pem $d/ca.crt; done
+$ cp ca/rootCA.pem ca/root.crt
 $ docker compose up -d
 $ vault-ceremony init
-$ for h in alice bob carol; do vault-ceremony key --as $h | decrypt $h | vault-ceremony unseal --node foundation-vault-0 --as $h; done
-$ for h in alice bob carol; do vault-ceremony key --as $h | decrypt $h | vault-ceremony unseal --as $h; done     # again if a node has not joined yet
-$ vault-ceremony initial-root-token --as alice | decrypt alice | vault-ceremony bootstrap --as alice
+$ for h in alice bob carol; do vault-ceremony key --as $h | pgp-personas decrypt --as $h | vault-ceremony unseal --node foundation-vault-0 --as $h; done
+$ for h in alice bob carol; do vault-ceremony key --as $h | pgp-personas decrypt --as $h | vault-ceremony unseal --as $h; done     # again if a node has not joined yet
+$ vault-ceremony initial-root-token --as alice | pgp-personas decrypt --as alice | vault-ceremony bootstrap --as alice
 ```
 
 Log in as alice with their initial password:
 
 ```bash
-$ decrypt alice < state/passwords/alice.asc
+$ pgp-personas decrypt --as alice < state/passwords/alice.asc
 $ vault login -method=userpass username=alice
 $ vault secrets enable -path=secret kv-v2
 ```
@@ -74,7 +77,8 @@ Provision its seal. The development seal's key is made here, as a file:
 
 ```bash
 $ cd ../workload-vault && . ./env
-$ dev-seal
+$ pgp-personas secret-key --name 'workload-vault development seal' --out seal-key/key.gpg
+$ chmod 0640 seal-key/key.gpg
 ```
 
 Or, with SAKURA Cloud KMS, store its credentials in the Foundation Vault, while still logged in there, and provision them from it: the credentials for the seals, and in `.env`, which Docker Compose reads, the seal to run and the key ID for the nodes.
@@ -93,11 +97,12 @@ $ cd ../workload-vault && . ./env
 Then start it, and initialize it. The seal unseals every node:
 
 ```bash
-$ keys alice bob carol safe-hq safe-dc2
-$ certs
+$ for p in alice bob carol safe-hq safe-dc2; do pgp-personas person --name $p --pubkey pubkeys/$p.gpg; done
+$ for n in 0 1 2; do d=tls/workload-vault-$n; mkdir -p $d && mkcert -ecdsa -cert-file $d/server.crt -key-file $d/server.key 172.29.0.1$n 172.29.0.5 && chmod 0640 $d/server.key && cp ca/rootCA.pem $d/ca.crt; done
+$ cp ca/rootCA.pem ca/root.crt
 $ docker compose --profile workload-vault up -d
 $ vault-ceremony init
-$ vault-ceremony initial-root-token --as alice | decrypt alice | vault-ceremony bootstrap --as alice
+$ vault-ceremony initial-root-token --as alice | pgp-personas decrypt --as alice | vault-ceremony bootstrap --as alice
 ```
 
 Log in as for the Foundation Vault. `cd <cluster> && . ./env` switches between the two; log in again after switching.

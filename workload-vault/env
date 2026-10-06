@@ -5,3 +5,6 @@
 # active. vault-ceremony reads the cluster from the directory it runs in.
 export VAULT_ADDR=https://172.29.0.5:8200
 export VAULT_CACERT="$PWD/ca/root.crt"
+# mkcert's CA in this cluster's directory, not the user's: each cluster
+# has its own.
+export CAROOT="$PWD/ca"

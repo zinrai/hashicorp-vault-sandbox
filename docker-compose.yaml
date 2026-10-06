@@ -13,7 +13,7 @@ x-vault: &vault
 # has been provisioned.
 x-workload: &workload
   <<: *vault
-  profiles: [workload]
+  profiles: [workload-vault]
   # dev unless .env names a KMS key: the development seal serves no other.
   environment:
     VAULT_TRANSIT_SEAL_KEY_NAME: ${WORKLOAD_SEAL_KEY_NAME:-dev}
@@ -24,21 +24,22 @@ x-workload: &workload
 # the nodes' configuration is the same for each.
 x-seal: &seal
   image: hashicorp/vault:2.1.1
-  profiles: [workload]
+  profiles: [workload-vault]
   restart: unless-stopped
   entrypoint: ["/usr/local/bin/vault-seal", "-socket", "/vault/seal/kms.sock"]
   # group_add, as for the nodes: the development seal's key stays 0640, and
   # the vault user reads it through the group.
   group_add:
     - "${HOST_GID:-1000}"
-  # Not on the workload network: it needs at most the way out to a KMS API.
+  # Not on the workload-vault network: it needs at most the way out to a
+  # KMS API.
   # The development key's path, fixed here, not provisioned: it is no
   # secret, and only vault-seal-dev reads it. A KMS's credentials, secret,
   # from seal.env.
   environment:
     VAULT_SEAL_DEV_KEY: /vault/seal-key/key.gpg
   env_file:
-    - path: workload/seal.env
+    - path: workload-vault/seal.env
       required: false
 
 # The image as is, with its configuration and the CA certificate mounted,
@@ -49,125 +50,125 @@ x-load-balancer: &load-balancer
 
 
 services:
-  foundation-lb:
+  foundation-vault-lb:
     <<: *load-balancer
-    container_name: foundation-lb
+    container_name: foundation-vault-lb
     volumes:
-      - ./foundation/haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro
-      - ./foundation/ca/root.crt:/usr/local/etc/haproxy/ca.crt:ro
+      - ./foundation-vault/haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro
+      - ./foundation-vault/ca/root.crt:/usr/local/etc/haproxy/ca.crt:ro
     networks:
-      foundation:
+      foundation-vault:
         ipv4_address: 172.28.0.5
 
-  foundation-0:
+  foundation-vault-0:
     <<: *vault
-    container_name: foundation-0
+    container_name: foundation-vault-0
     volumes:
-      - ./foundation/config/foundation-0:/vault/config:ro
-      - ./foundation/tls/foundation-0:/vault/tls:ro
-      - foundation-0-data:/vault/file
-      - foundation-0-audit:/vault/logs
+      - ./foundation-vault/config/foundation-vault-0:/vault/config:ro
+      - ./foundation-vault/tls/foundation-vault-0:/vault/tls:ro
+      - foundation-vault-0-data:/vault/file
+      - foundation-vault-0-audit:/vault/logs
     networks:
-      foundation:
+      foundation-vault:
         ipv4_address: 172.28.0.10
 
-  foundation-1:
+  foundation-vault-1:
     <<: *vault
-    container_name: foundation-1
+    container_name: foundation-vault-1
     volumes:
-      - ./foundation/config/foundation-1:/vault/config:ro
-      - ./foundation/tls/foundation-1:/vault/tls:ro
-      - foundation-1-data:/vault/file
-      - foundation-1-audit:/vault/logs
+      - ./foundation-vault/config/foundation-vault-1:/vault/config:ro
+      - ./foundation-vault/tls/foundation-vault-1:/vault/tls:ro
+      - foundation-vault-1-data:/vault/file
+      - foundation-vault-1-audit:/vault/logs
     networks:
-      foundation:
+      foundation-vault:
         ipv4_address: 172.28.0.11
 
-  foundation-2:
+  foundation-vault-2:
     <<: *vault
-    container_name: foundation-2
+    container_name: foundation-vault-2
     volumes:
-      - ./foundation/config/foundation-2:/vault/config:ro
-      - ./foundation/tls/foundation-2:/vault/tls:ro
-      - foundation-2-data:/vault/file
-      - foundation-2-audit:/vault/logs
+      - ./foundation-vault/config/foundation-vault-2:/vault/config:ro
+      - ./foundation-vault/tls/foundation-vault-2:/vault/tls:ro
+      - foundation-vault-2-data:/vault/file
+      - foundation-vault-2-audit:/vault/logs
     networks:
-      foundation:
+      foundation-vault:
         ipv4_address: 172.28.0.12
 
-  workload-lb:
+  workload-vault-lb:
     <<: *load-balancer
-    container_name: workload-lb
-    profiles: [workload]
+    container_name: workload-vault-lb
+    profiles: [workload-vault]
     volumes:
-      - ./workload/haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro
-      - ./workload/ca/root.crt:/usr/local/etc/haproxy/ca.crt:ro
+      - ./workload-vault/haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro
+      - ./workload-vault/ca/root.crt:/usr/local/etc/haproxy/ca.crt:ro
     networks:
-      workload:
+      workload-vault:
         ipv4_address: 172.29.0.5
 
-  workload-0:
+  workload-vault-0:
     <<: *workload
-    container_name: workload-0
+    container_name: workload-vault-0
     volumes:
-      - ./workload/config/workload-0:/vault/config:ro
-      - ./workload/tls/workload-0:/vault/tls:ro
-      - workload-0-data:/vault/file
-      - workload-0-audit:/vault/logs
-      - workload-0-seal:/vault/seal
+      - ./workload-vault/config/workload-vault-0:/vault/config:ro
+      - ./workload-vault/tls/workload-vault-0:/vault/tls:ro
+      - workload-vault-0-data:/vault/file
+      - workload-vault-0-audit:/vault/logs
+      - workload-vault-0-seal:/vault/seal
     networks:
-      workload:
+      workload-vault:
         ipv4_address: 172.29.0.10
 
-  workload-0-seal:
+  workload-vault-0-seal:
     <<: *seal
-    container_name: workload-0-seal
+    container_name: workload-vault-0-seal
     volumes:
       - ./bin/${WORKLOAD_SEAL:-vault-seal-dev}:/usr/local/bin/vault-seal:ro
-      - ./workload/seal-key:/vault/seal-key:ro
-      - workload-0-seal:/vault/seal
+      - ./workload-vault/seal-key:/vault/seal-key:ro
+      - workload-vault-0-seal:/vault/seal
 
-  workload-1:
+  workload-vault-1:
     <<: *workload
-    container_name: workload-1
+    container_name: workload-vault-1
     volumes:
-      - ./workload/config/workload-1:/vault/config:ro
-      - ./workload/tls/workload-1:/vault/tls:ro
-      - workload-1-data:/vault/file
-      - workload-1-audit:/vault/logs
-      - workload-1-seal:/vault/seal
+      - ./workload-vault/config/workload-vault-1:/vault/config:ro
+      - ./workload-vault/tls/workload-vault-1:/vault/tls:ro
+      - workload-vault-1-data:/vault/file
+      - workload-vault-1-audit:/vault/logs
+      - workload-vault-1-seal:/vault/seal
     networks:
-      workload:
+      workload-vault:
         ipv4_address: 172.29.0.11
 
-  workload-1-seal:
+  workload-vault-1-seal:
     <<: *seal
-    container_name: workload-1-seal
+    container_name: workload-vault-1-seal
     volumes:
       - ./bin/${WORKLOAD_SEAL:-vault-seal-dev}:/usr/local/bin/vault-seal:ro
-      - ./workload/seal-key:/vault/seal-key:ro
-      - workload-1-seal:/vault/seal
+      - ./workload-vault/seal-key:/vault/seal-key:ro
+      - workload-vault-1-seal:/vault/seal
 
-  workload-2:
+  workload-vault-2:
     <<: *workload
-    container_name: workload-2
+    container_name: workload-vault-2
     volumes:
-      - ./workload/config/workload-2:/vault/config:ro
-      - ./workload/tls/workload-2:/vault/tls:ro
-      - workload-2-data:/vault/file
-      - workload-2-audit:/vault/logs
-      - workload-2-seal:/vault/seal
+      - ./workload-vault/config/workload-vault-2:/vault/config:ro
+      - ./workload-vault/tls/workload-vault-2:/vault/tls:ro
+      - workload-vault-2-data:/vault/file
+      - workload-vault-2-audit:/vault/logs
+      - workload-vault-2-seal:/vault/seal
     networks:
-      workload:
+      workload-vault:
         ipv4_address: 172.29.0.12
 
-  workload-2-seal:
+  workload-vault-2-seal:
     <<: *seal
-    container_name: workload-2-seal
+    container_name: workload-vault-2-seal
     volumes:
       - ./bin/${WORKLOAD_SEAL:-vault-seal-dev}:/usr/local/bin/vault-seal:ro
-      - ./workload/seal-key:/vault/seal-key:ro
-      - workload-2-seal:/vault/seal
+      - ./workload-vault/seal-key:/vault/seal-key:ro
+      - workload-vault-2-seal:/vault/seal
 
 
 # No published ports: the host reaches the nodes on the bridge networks at
@@ -175,11 +176,11 @@ services:
 # networks, not one: the Workload Vault must not reach the Foundation Vault
 # at runtime.
 networks:
-  foundation:
+  foundation-vault:
     ipam:
       config:
         - subnet: 172.28.0.0/24
-  workload:
+  workload-vault:
     ipam:
       config:
         - subnet: 172.29.0.0/24
@@ -193,18 +194,18 @@ x-seal-socket: &seal-socket
     o: "uid=100,gid=1000,mode=0750"
 
 volumes:
-  foundation-0-data:
-  foundation-1-data:
-  foundation-2-data:
-  foundation-0-audit:
-  foundation-1-audit:
-  foundation-2-audit:
-  workload-0-data:
-  workload-1-data:
-  workload-2-data:
-  workload-0-audit:
-  workload-1-audit:
-  workload-2-audit:
-  workload-0-seal: *seal-socket
-  workload-1-seal: *seal-socket
-  workload-2-seal: *seal-socket
+  foundation-vault-0-data:
+  foundation-vault-1-data:
+  foundation-vault-2-data:
+  foundation-vault-0-audit:
+  foundation-vault-1-audit:
+  foundation-vault-2-audit:
+  workload-vault-0-data:
+  workload-vault-1-data:
+  workload-vault-2-data:
+  workload-vault-0-audit:
+  workload-vault-1-audit:
+  workload-vault-2-audit:
+  workload-vault-0-seal: *seal-socket
+  workload-vault-1-seal: *seal-socket
+  workload-vault-2-seal: *seal-socket

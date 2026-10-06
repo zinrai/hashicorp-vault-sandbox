@@ -1,6 +1,6 @@
 # Operational Scenarios
 
-Each scenario assumes the shell from the [README](../README.md) (`. sandbox/env.sh`), the cluster's directory with its environment (`cd foundation && . ./env`, or the same for `workload`), and an operator logged in. Commands that apply to one cluster only say so.
+Each scenario assumes the shell from the [README](../README.md) (`. sandbox/env.sh`), the cluster's directory with its environment (`cd foundation-vault && . ./env`, or the same for `workload-vault`), and an operator logged in. Commands that apply to one cluster only say so.
 
 Generating a root token and rekeying take a Vault token as well as the keys, from the operator's `vault login` in the shell where they run. A holder who is not an operator approves in a shell where an operator has logged in. At any point, `vault-ceremony status --as <name>` shows that person's next step.
 
@@ -16,10 +16,10 @@ Stop a node only while autopilot shows `Failure Tolerance: 1`.
 ## Follower Recovery (Foundation)
 
 ```bash
-$ docker compose stop foundation-1
+$ docker compose stop foundation-vault-1
 $ vault operator raft autopilot state
-$ docker compose start foundation-1
-$ for h in alice bob safe-hq; do vault-ceremony key --as $h | decrypt $h | vault-ceremony unseal --node foundation-1 --as $h; done
+$ docker compose start foundation-vault-1
+$ for h in alice bob safe-hq; do vault-ceremony key --as $h | decrypt $h | vault-ceremony unseal --node foundation-vault-1 --as $h; done
 ```
 
 ## Node Restart (Workload)
@@ -27,7 +27,7 @@ $ for h in alice bob safe-hq; do vault-ceremony key --as $h | decrypt $h | vault
 A restarted node unseals by itself:
 
 ```bash
-$ docker compose restart workload-1
+$ docker compose restart workload-vault-1
 $ vault-ceremony status
 ```
 
@@ -36,34 +36,34 @@ $ vault-ceremony status
 A node does not start while its seal is down, and starts and unseals once the seal is back:
 
 ```bash
-$ docker compose stop workload-1-seal
-$ docker compose restart workload-1
-$ vault-ceremony status                  # workload-1 unreachable
-$ docker compose logs workload-1         # error parsing Seal configuration
-$ docker compose start workload-1-seal
-$ vault-ceremony status                  # workload-1 unsealed
+$ docker compose stop workload-vault-1-seal
+$ docker compose restart workload-vault-1
+$ vault-ceremony status                  # workload-vault-1 unreachable
+$ docker compose logs workload-vault-1   # error parsing Seal configuration
+$ docker compose start workload-vault-1-seal
+$ vault-ceremony status                  # workload-vault-1 unsealed
 ```
 
 ## Leader Failover (Foundation)
 
-Stop the leader (assume `foundation-0`), wait about 15 seconds for another node to become active, and for the load balancer to send to it, then bring it back:
+Stop the leader (assume `foundation-vault-0`), wait about 15 seconds for another node to become active, and for the load balancer to send to it, then bring it back:
 
 ```bash
-$ docker compose stop foundation-0
+$ docker compose stop foundation-vault-0
 $ vault-ceremony status
-$ vault status                           # through the load balancer, from the new active node
-$ docker compose logs foundation-lb      # which node it sends to
-$ docker compose start foundation-0
-$ for h in alice bob carol; do vault-ceremony key --as $h | decrypt $h | vault-ceremony unseal --node foundation-0 --as $h; done
+$ vault status                             # through the load balancer, from the new active node
+$ docker compose logs foundation-vault-lb  # which node it sends to
+$ docker compose start foundation-vault-0
+$ for h in alice bob carol; do vault-ceremony key --as $h | decrypt $h | vault-ceremony unseal --node foundation-vault-0 --as $h; done
 ```
 
 ## Rolling Restart (Foundation)
 
-One node at a time, `foundation-0` last, each once autopilot shows `Failure Tolerance: 1` again:
+One node at a time, `foundation-vault-0` last, each once autopilot shows `Failure Tolerance: 1` again:
 
 ```bash
-$ docker compose restart foundation-2
-$ for h in alice bob carol; do vault-ceremony key --as $h | decrypt $h | vault-ceremony unseal --node foundation-2 --as $h; done
+$ docker compose restart foundation-vault-2
+$ for h in alice bob carol; do vault-ceremony key --as $h | decrypt $h | vault-ceremony unseal --node foundation-vault-2 --as $h; done
 ```
 
 If the node is not listening yet, the unseal reports it as unreachable; run it again.
@@ -87,16 +87,16 @@ The last resort, for a lockout that several operators and the [denials of the ad
 Let generate-root run without a token, generate a root token as above, then close it again. A SIGHUP applies the configuration, without a restart or an unseal:
 
 ```bash
-$ for n in 0 1 2; do echo 'enable_unauthenticated_access = ["generate-root"]' >> config/foundation-$n/vault.hcl; done
-$ docker compose kill -s HUP foundation-0 foundation-1 foundation-2
+$ for n in 0 1 2; do echo 'enable_unauthenticated_access = ["generate-root"]' >> config/foundation-vault-$n/vault.hcl; done
+$ docker compose kill -s HUP foundation-vault-0 foundation-vault-1 foundation-vault-2
 $ vault-ceremony generate-root --for alice
 $ for h in alice carol safe-dc2; do vault-ceremony key --as $h | decrypt $h | vault-ceremony approve --nonce <nonce> --as $h; done
-$ sed -i '/^enable_unauthenticated_access/d' config/foundation-*/vault.hcl
-$ docker compose kill -s HUP foundation-0 foundation-1 foundation-2
+$ sed -i '/^enable_unauthenticated_access/d' config/foundation-vault-*/vault.hcl
+$ docker compose kill -s HUP foundation-vault-0 foundation-vault-1 foundation-vault-2
 $ vault-ceremony root-token --as alice | decrypt alice
 ```
 
-For the Workload Vault, the same with `workload-[0-2]`. While it is open, anyone who can reach the API can cancel the generation, so close it as soon as the token is out.
+For the Workload Vault, the same with `workload-vault-[0-2]`. While it is open, anyone who can reach the API can cancel the generation, so close it as soon as the token is out.
 
 ## Rekeying When a Holder Leaves
 
@@ -124,28 +124,28 @@ $ cp state/shares.json state/snapshots/<time>.shares.json
 Restore into fresh nodes, with only the first one running until it has been restored and restarted. For the Foundation Vault:
 
 ```bash
-$ docker compose stop foundation-0 foundation-1 foundation-2
-$ docker compose rm -f foundation-0 foundation-1 foundation-2
+$ docker compose stop foundation-vault-0 foundation-vault-1 foundation-vault-2
+$ docker compose rm -f foundation-vault-0 foundation-vault-1 foundation-vault-2
 $ docker volume rm $(docker volume ls -q | grep -E '_foundation-[0-2]-(data|audit)$')
-$ docker compose up -d foundation-0
+$ docker compose up -d foundation-vault-0
 $ vault-ceremony restore --snapshot state/snapshots/<time>.snap --shares state/snapshots/<time>.shares.json
-$ docker compose restart foundation-0
-$ for h in alice bob carol; do vault-ceremony key --as $h | decrypt $h | vault-ceremony unseal --node foundation-0 --as $h; done
-$ docker compose up -d foundation-1 foundation-2
+$ docker compose restart foundation-vault-0
+$ for h in alice bob carol; do vault-ceremony key --as $h | decrypt $h | vault-ceremony unseal --node foundation-vault-0 --as $h; done
+$ docker compose up -d foundation-vault-1 foundation-vault-2
 $ for h in alice bob carol; do vault-ceremony key --as $h | decrypt $h | vault-ceremony unseal --as $h; done
 $ vault login -method=userpass username=alice
 ```
 
-For the Workload Vault, the same with `--profile workload` and `workload-[0-2]`, without the unseals: the seal unseals every node.
+For the Workload Vault, the same with `--profile workload-vault` and `workload-vault-[0-2]`, without the unseals: the seal unseals every node.
 
 ## Rotating the KMS Credentials (Workload, SAKURA Cloud KMS)
 
-Update the credentials in the Foundation Vault, write `workload/seal.env` again as in the [README](../README.md#workload-vault), and restart the seals:
+Update the credentials in the Foundation Vault, write `workload-vault/seal.env` again as in the [README](../README.md#workload-vault), and restart the seals:
 
 ```bash
-$ cd ../foundation && . ./env
+$ cd ../foundation-vault && . ./env
 $ vault kv patch secret/platform/sakura-kms access_token=<new> access_token_secret=<new>
-$ docker compose --profile workload up -d --force-recreate workload-0-seal workload-1-seal workload-2-seal
+$ docker compose --profile workload-vault up -d --force-recreate workload-vault-0-seal workload-vault-1-seal workload-vault-2-seal
 ```
 
 ## Automation with AppRole (Foundation)

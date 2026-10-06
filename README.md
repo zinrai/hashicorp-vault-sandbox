@@ -4,8 +4,8 @@ Practise running a two-tier secrets hierarchy on one Linux host, with two 3-node
 
 | Cluster | Unsealed by | Holds |
 |---|---|---|
-| **Foundation Vault** (`foundation/`) | Unseal keys held by people | What it takes to rebuild everything else, including the Workload Vault's KMS credentials when it uses a cloud KMS |
-| **Workload Vault** (`workload/`) | A seal beside each node that answers Vault's transit API: [vault-seal-dev](https://github.com/zinrai/vault-seal-dev) (a key file, development only), or [SAKURA Cloud KMS](https://cloud.sakura.ad.jp/products/kms/) through [vault-seal-sakura-kms](https://github.com/zinrai/vault-seal-sakura-kms) | The secrets applications use. People hold its recovery keys |
+| **Foundation Vault** (`foundation-vault/`) | Unseal keys held by people | What it takes to rebuild everything else, including the Workload Vault's KMS credentials when it uses a cloud KMS |
+| **Workload Vault** (`workload-vault/`) | A seal beside each node that answers Vault's transit API: [vault-seal-dev](https://github.com/zinrai/vault-seal-dev) (a key file, development only), or [SAKURA Cloud KMS](https://cloud.sakura.ad.jp/products/kms/) through [vault-seal-sakura-kms](https://github.com/zinrai/vault-seal-sakura-kms) | The secrets applications use. People hold its recovery keys |
 
 ```mermaid
 flowchart TB
@@ -50,12 +50,12 @@ $ . sandbox/env.sh
 ### Foundation Vault
 
 ```bash
-$ cd foundation && . ./env
+$ cd foundation-vault && . ./env
 $ keys alice bob carol safe-hq safe-dc2
 $ certs
 $ docker compose up -d
 $ vault-ceremony init
-$ for h in alice bob carol; do vault-ceremony key --as $h | decrypt $h | vault-ceremony unseal --node foundation-0 --as $h; done
+$ for h in alice bob carol; do vault-ceremony key --as $h | decrypt $h | vault-ceremony unseal --node foundation-vault-0 --as $h; done
 $ for h in alice bob carol; do vault-ceremony key --as $h | decrypt $h | vault-ceremony unseal --as $h; done     # again if a node has not joined yet
 $ vault-ceremony initial-root-token --as alice | decrypt alice | vault-ceremony bootstrap --as alice
 ```
@@ -73,7 +73,7 @@ $ vault secrets enable -path=secret kv-v2
 Provision its seal. The development seal's key is made here, as a file:
 
 ```bash
-$ cd ../workload && . ./env
+$ cd ../workload-vault && . ./env
 $ dev-seal
 ```
 
@@ -85,9 +85,9 @@ $ vault kv put secret/platform/sakura-kms \
 $ kms() { vault kv get -field="$1" secret/platform/sakura-kms; }
 $ (umask 077
    printf 'SAKURA_ACCESS_TOKEN=%s\nSAKURA_ACCESS_TOKEN_SECRET=%s\nSAKURA_KMS_KEY_ID=%s\n' \
-     "$(kms access_token)" "$(kms access_token_secret)" "$(kms key_id)" > ../workload/seal.env
+     "$(kms access_token)" "$(kms access_token_secret)" "$(kms key_id)" > ../workload-vault/seal.env
    printf 'WORKLOAD_SEAL=vault-seal-sakura-kms\nWORKLOAD_SEAL_KEY_NAME=%s\n' "$(kms key_id)" > ../.env)
-$ cd ../workload && . ./env
+$ cd ../workload-vault && . ./env
 ```
 
 Then start it, and initialize it. The seal unseals every node:
@@ -95,7 +95,7 @@ Then start it, and initialize it. The seal unseals every node:
 ```bash
 $ keys alice bob carol safe-hq safe-dc2
 $ certs
-$ docker compose --profile workload up -d
+$ docker compose --profile workload-vault up -d
 $ vault-ceremony init
 $ vault-ceremony initial-root-token --as alice | decrypt alice | vault-ceremony bootstrap --as alice
 ```
@@ -107,9 +107,9 @@ Log in as for the Foundation Vault. `cd <cluster> && . ./env` switches between t
 To put applications on the Workload Vault, clone [hashicorp-vault-lab](https://github.com/zinrai/hashicorp-vault-lab) here, set up the shell for it, and follow its README from there:
 
 ```bash
-$ cd ../workload && . ./env
+$ cd ../workload-vault && . ./env
 $ vault login -method=userpass username=alice
-$ export VAULT_NETWORK=hashicorp-vault-sandbox_workload
+$ export VAULT_NETWORK=hashicorp-vault-sandbox_workload-vault
 $ cd ../hashicorp-vault-lab
 ```
 

@@ -17,6 +17,6 @@
 
 # Not committed: the seal's credentials, the development seal's key, and
 # the choice of seal, which differs from one sandbox to the next.
-/workload/*.env
-/workload/seal-key/
+/workload-vault/*.env
+/workload-vault/seal-key/
 /.env

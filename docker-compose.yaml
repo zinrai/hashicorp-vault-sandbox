@@ -1,7 +1,5 @@
 # The official image as is, not an image of our own: /vault/config,
 # /vault/file and /vault/logs already exist in it, owned by the vault user.
-# On hosts, configuration management replaces this file and nothing else
-# (docs/node-contract.md).
 x-vault: &vault
   image: hashicorp/vault:2.1.1
   command: server

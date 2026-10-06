@@ -4,8 +4,8 @@ cluster_name = "workload"
 ui = false
 
 # mlock off, not on: Integrated Storage memory-maps its database, which
-# does not mix with mlock. Swap is disabled on the host instead (node
-# contract), as HashiCorp advises for Raft.
+# does not mix with mlock. Swap is disabled on the host instead, as
+# HashiCorp advises for Raft.
 disable_mlock = true
 
 # No enable_unauthenticated_access: generate-root and rekey stay behind a

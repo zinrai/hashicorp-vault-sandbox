@@ -1,6 +1,6 @@
 # Architecture
 
-How the parts connect. Addresses, ports and file names are left to the configuration and to the [node contract](node-contract.md), which say them exactly.
+How the parts connect. Addresses, ports and file names are left to the configuration, which says them exactly.
 
 ## A Node
 

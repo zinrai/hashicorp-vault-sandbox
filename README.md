@@ -119,7 +119,7 @@ Failover, ceremonies, restore and the rest are in [docs/scenarios.md](docs/scena
 
 ## Taking It to Production
 
-Only the nodes change: on hosts, configuration management provides what `docker-compose.yaml` provides here. [docs/node-contract.md](docs/node-contract.md) lists it.
+To set up the same two tiers on Debian hosts, use [hashicorp-vault-ansible](https://github.com/zinrai/hashicorp-vault-ansible).
 
 ## License
 
